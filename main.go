@@ -7,11 +7,16 @@ import (
 	"mvdan.cc/xurls"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 var botToken = "MyAwesomeBotToken"
+
+var botAPI *tgbotapi.BotAPI
 
 func getRedirectURL(shortURL string) ([]string, error) {
 
@@ -120,22 +125,7 @@ func ReverseShortURL(msg string) (string, error) {
 	return result, nil
 }
 
-func main() {
-	bot, err := tgbotapi.NewBotAPI(botToken)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("Authorized on account %s", bot.Self.UserName)
-
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
-	updates, err := bot.GetUpdatesChan(u)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func handleUpdates(updates tgbotapi.UpdatesChannel) {
 	for update := range updates {
 		if update.Message == nil {
 			continue
@@ -155,9 +145,39 @@ func main() {
 				msg := tgbotapi.NewMessage(receive.Chat.ID, reply)
 				msg.ReplyToMessageID = receive.MessageID
 				msg.DisableWebPagePreview = true
-				bot.Send(msg)
+				botAPI.Send(msg)
 			}
 
 		}(update.Message)
 	}
+}
+
+func ServeBot() *tgbotapi.BotAPI {
+	bot, err := tgbotapi.NewBotAPI(botToken)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("Authorized on account %s", bot.Self.UserName)
+
+	u := tgbotapi.NewUpdate(0)
+	u.Timeout = 60
+
+	updates, err := bot.GetUpdatesChan(u)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	go handleUpdates(updates)
+
+	return bot
+}
+
+func main() {
+	botAPI = ServeBot()
+	defer botAPI.StopReceivingUpdates()
+
+	osSignals := make(chan os.Signal, 1)
+	signal.Notify(osSignals, os.Interrupt, os.Kill, syscall.SIGTERM)
+	<-osSignals
 }
