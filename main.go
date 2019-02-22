@@ -11,40 +11,62 @@ import (
 	"sync"
 )
 
-var botAPI = "MyAwesomeBotToken"
+var botToken = "MyAwesomeBotToken"
 
-func getRedirectURL(shortURL string) (string, error) {
-	originURL, err := url.Parse(shortURL)
-	if err != nil {
-		return "", err
+func getRedirectURL(shortURL string) ([]string, error) {
+
+	if _, err := url.Parse(shortURL); err != nil {
+		return []string{}, err
 	}
 
-	result := ""
+	result := append(make([]string, 0), shortURL)
 	client := http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return fmt.Errorf("stopped after 10 redirects")
 		}
 
-		result = req.Response.Header["Location"][0]
+		newRaw := req.Response.Header["Location"][0]
+		valid, err := isChangeValid(result[len(result)-1], newRaw)
+		if err != nil {
+			return http.ErrUseLastResponse
+		}
+		if valid {
+			result = append(result, newRaw)
+		}
 		return nil
 	}}
 	req, err := http.NewRequest(http.MethodGet, shortURL, nil)
 	if err != nil {
-		return "", err
+		return []string{}, err
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return []string{}, err
 	}
 	defer resp.Body.Close()
 
-	location, err := url.Parse(result)
-	if err != nil || location.Path == originURL.Path {
-		return "", fmt.Errorf("url: %s has no redirect", shortURL)
+	if len(result) > 1 {
+		return result, nil
+	}
+	return []string{}, fmt.Errorf("url: %s has no redirect", shortURL)
+}
+
+func isChangeValid(oldRaw string, newRaw string) (bool, error) {
+	oldURL, err := url.Parse(oldRaw)
+	if err != nil {
+		return false, err
 	}
 
-	return result, nil
+	newURL, err := url.Parse(newRaw)
+	if err != nil {
+		return false, err
+	}
+
+	if oldURL.Path == newURL.Path {
+		return false, nil
+	}
+	return true, nil
 }
 
 func findURL(text string) ([]string, error) {
@@ -67,15 +89,18 @@ func ReverseShortURL(msg string) (string, error) {
 		return "", err
 	}
 
-	urlMap := make(map[string]string)
+	urlMap := make(map[string][]string)
 
 	group := sync.WaitGroup{}
 	for _, u := range shortURLs {
 
 		group.Add(1)
-		go func(list map[string]string, s string) {
+		go func(list map[string][]string, s string) {
 
-			urlMap[s], _ = getRedirectURL(s)
+			urlMap[s], err = getRedirectURL(s)
+			if err != nil {
+				log.Print(err)
+			}
 			group.Done()
 
 		}(urlMap, u)
@@ -84,9 +109,9 @@ func ReverseShortURL(msg string) (string, error) {
 
 	var result string
 	for _, s := range shortURLs {
-		l := urlMap[s]
-		if len(l) != 0 {
-			result += fmt.Sprintf("✅ %s ➡️ %s\n", s, l)
+		longURL := urlMap[s]
+		if len(longURL) > 0 {
+			result += fmt.Sprintf("✅ %s\n", strings.Join(longURL, " ➡️ "))
 		} else {
 			result += fmt.Sprintf("❌ %s\n", s)
 		}
@@ -96,9 +121,9 @@ func ReverseShortURL(msg string) (string, error) {
 }
 
 func main() {
-	bot, err := tgbotapi.NewBotAPI(botAPI)
+	bot, err := tgbotapi.NewBotAPI(botToken)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal(err)
 	}
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
@@ -108,7 +133,7 @@ func main() {
 
 	updates, err := bot.GetUpdatesChan(u)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal(err)
 	}
 
 	for update := range updates {
