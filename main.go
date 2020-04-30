@@ -4,17 +4,20 @@ import (
 	"fmt"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 	"log"
-	"mvdan.cc/xurls"
+	"math"
+	"mvdan.cc/xurls/v2"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 )
 
 var botToken = "MyAwesomeBotToken"
+var bilibiliHost = "www.bilibili.com"
 
 var botAPI *tgbotapi.BotAPI
 
@@ -30,7 +33,7 @@ func getRedirectURL(shortURL string) ([]string, error) {
 			return fmt.Errorf("stopped after 10 redirects")
 		}
 
-		newRaw := req.Response.Header["Location"][0]
+		newRaw := req.URL.String()
 		valid, err := isChangeValid(result[len(result)-1], newRaw)
 		if err != nil {
 			return http.ErrUseLastResponse
@@ -88,6 +91,52 @@ func findURL(text string) ([]string, error) {
 	return urls, nil
 }
 
+func checkBiliBV(rawurl string) (bv string, av string, err error) {
+	u, err := url.Parse(rawurl)
+	if err != nil {
+		return "", "", err
+	}
+	if u.Host != bilibiliHost {
+		return "", "", fmt.Errorf("not bilibili")
+	}
+	pathElements := strings.Split(u.Path, "/")
+	for _, e := range pathElements {
+		if strings.HasPrefix(e, "BV") {
+			bv = e
+			break
+		}
+	}
+	if bv != "" {
+		av = bv2av(bv)
+	}
+
+	if bv != "" && av != "" {
+		return bv, av, nil
+	} else {
+		return "", "", fmt.Errorf("convert bv to av failed")
+	}
+}
+
+func bv2av(bv string) string {
+	table := "fZodR9XQDSUm21yCkr6zBqiveYah8bt4xsWpHnJE7jL5VG3guMTKNPAwcF"
+	s := [6]int64{11, 10, 3, 8, 4, 6}
+
+	const xor int64 = 177451812
+	const add int64 = 8728348608
+	
+	var r int64
+	var av int64
+	tr := make(map[int64]int64)
+	for i := 0; i < 58; i++ {
+		tr[int64(table[i])] = int64(i)
+	}
+	for i := 0; i < 6; i++ {
+		r += tr[int64(bv[s[i]])] * int64(math.Pow(float64(58), float64(i)))
+	}
+	av = (r - add) ^ xor
+	return "av" + strconv.FormatInt(av, 10)
+}
+
 func ReverseShortURL(msg string) (string, error) {
 	shortURLs, err := findURL(msg)
 	if err != nil {
@@ -116,7 +165,11 @@ func ReverseShortURL(msg string) (string, error) {
 	for _, s := range shortURLs {
 		longURL := urlMap[s]
 		if len(longURL) > 0 {
-			result += fmt.Sprintf("✅ %s\n", strings.Join(longURL, " ➡️ "))
+			result += fmt.Sprintf("✅ %s\n", strings.Join(longURL, "\n➡️ "))
+			//bilibili bv to av
+			if bv, av, err := checkBiliBV(longURL[len(longURL) - 1]); err == nil {
+				result += fmt.Sprintf("🆎 %s ➡️ %s\n", bv, av)
+			}
 		} else {
 			result += fmt.Sprintf("❌ %s\n", s)
 		}
