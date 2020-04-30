@@ -164,17 +164,20 @@ func ReverseShortURL(msg string) (string, error) {
 	var result string
 	for _, s := range shortURLs {
 		longURL := urlMap[s]
+		lastURL := s
 		if len(longURL) > 0 {
 			result += fmt.Sprintf("✅ %s\n", strings.Join(longURL, "\n➡️ "))
-			//bilibili bv to av
-			if bv, av, err := checkBiliBV(longURL[len(longURL) - 1]); err == nil {
-				result += fmt.Sprintf("🆎 %s ➡️ %s\n", bv, av)
-			}
+			lastURL = longURL[len(longURL) - 1]
 		} else {
 			result += fmt.Sprintf("❌ %s\n", s)
 		}
+		//bilibili bv to av
+		if bv, av, err := checkBiliBV(lastURL); err == nil {
+			result += fmt.Sprintf("🆎 %s ➡️ %s\n", bv, av)
+		}
+		result += "\n"
 	}
-	result = strings.TrimSuffix(result, "\n")
+	result = strings.TrimSuffix(result, "\n\n")
 	return result, nil
 }
 
