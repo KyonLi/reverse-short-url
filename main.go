@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 )
 
 var botToken = "MyAwesomeBotToken"
@@ -42,7 +43,7 @@ func getRedirectURL(shortURL string) ([]string, error) {
 			result = append(result, newRaw)
 		}
 		return nil
-	}}
+	}, Timeout: 5 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, shortURL, nil)
 	if err != nil {
 		return []string{}, err
@@ -123,7 +124,7 @@ func bv2av(bv string) string {
 
 	const xor int64 = 177451812
 	const add int64 = 8728348608
-	
+
 	var r int64
 	var av int64
 	tr := make(map[int64]int64)
@@ -167,7 +168,7 @@ func ReverseShortURL(msg string) (string, error) {
 		lastURL := s
 		if len(longURL) > 0 {
 			result += fmt.Sprintf("✅ %s\n", strings.Join(longURL, "\n➡️ "))
-			lastURL = longURL[len(longURL) - 1]
+			lastURL = longURL[len(longURL)-1]
 		} else {
 			result += fmt.Sprintf("❌ %s\n", s)
 		}
