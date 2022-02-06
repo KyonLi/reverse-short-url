@@ -1,9 +1,8 @@
 module reverse-short-url
 
-go 1.15
+go 1.17
 
 require (
-	github.com/go-telegram-bot-api/telegram-bot-api v4.6.4+incompatible
-	github.com/technoweenie/multipartstreamer v1.0.1 // indirect
-	mvdan.cc/xurls/v2 v2.2.0
+	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
+	mvdan.cc/xurls/v2 v2.3.0
 )

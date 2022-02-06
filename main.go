@@ -1,11 +1,10 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"github.com/go-telegram-bot-api/telegram-bot-api"
 	"log"
 	"math"
-	"mvdan.cc/xurls/v2"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,9 +14,16 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"mvdan.cc/xurls/v2"
 )
 
-var botToken = "MyAwesomeBotToken"
+var (
+	help     = flag.Bool("h", false, "This help.")
+	botToken = flag.String("b", "", "Telegram bot token.")
+)
+
 var bilibiliHost = "www.bilibili.com"
 
 var botAPI *tgbotapi.BotAPI
@@ -29,21 +35,24 @@ func getRedirectURL(shortURL string) ([]string, error) {
 	}
 
 	result := append(make([]string, 0), shortURL)
-	client := http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return fmt.Errorf("stopped after 10 redirects")
-		}
+	client := http.Client{
+		Timeout: 5 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
 
-		newRaw := req.URL.String()
-		valid, err := isChangeValid(result[len(result)-1], newRaw)
-		if err != nil {
-			return http.ErrUseLastResponse
-		}
-		if valid {
-			result = append(result, newRaw)
-		}
-		return nil
-	}, Timeout: 5 * time.Second}
+			newRaw := req.URL.String()
+			valid, err := isChangeValid(result[len(result)-1], newRaw)
+			if err != nil {
+				return http.ErrUseLastResponse
+			}
+			if valid {
+				result = append(result, newRaw)
+			}
+			return nil
+		},
+	}
 	req, err := http.NewRequest(http.MethodGet, shortURL, nil)
 	if err != nil {
 		return []string{}, err
@@ -152,7 +161,7 @@ func ReverseShortURL(msg string) (string, error) {
 		group.Add(1)
 		go func(list map[string][]string, s string) {
 
-			urlMap[s], err = getRedirectURL(s)
+			list[s], err = getRedirectURL(s)
 			if err != nil {
 				log.Print(err)
 			}
@@ -210,7 +219,7 @@ func handleUpdates(updates tgbotapi.UpdatesChannel) {
 }
 
 func ServeBot() *tgbotapi.BotAPI {
-	bot, err := tgbotapi.NewBotAPI(botToken)
+	bot, err := tgbotapi.NewBotAPI(*botToken)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -220,10 +229,7 @@ func ServeBot() *tgbotapi.BotAPI {
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
 
-	updates, err := bot.GetUpdatesChan(u)
-	if err != nil {
-		log.Fatal(err)
-	}
+	updates := bot.GetUpdatesChan(u)
 
 	go handleUpdates(updates)
 
@@ -231,6 +237,13 @@ func ServeBot() *tgbotapi.BotAPI {
 }
 
 func main() {
+	flag.Parse()
+
+	if *help || *botToken == "" {
+		flag.Usage()
+		return
+	}
+
 	botAPI = ServeBot()
 	defer botAPI.StopReceivingUpdates()
 
