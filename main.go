@@ -22,11 +22,13 @@ import (
 var (
 	help     = flag.Bool("h", false, "This help.")
 	botToken = flag.String("b", "", "Telegram bot token.")
+	proxyURL = flag.String("p", "", "Proxy for web requests. (e.g., http://127.0.0.1:8080, socks5://127.0.0.1:1080)")
 )
 
 var bilibiliHost = "www.bilibili.com"
 
 var botAPI *tgbotapi.BotAPI
+var httpTransport *http.Transport
 
 func getRedirectURL(shortURL string) ([]string, error) {
 
@@ -36,7 +38,8 @@ func getRedirectURL(shortURL string) ([]string, error) {
 
 	result := append(make([]string, 0), shortURL)
 	client := http.Client{
-		Timeout: 5 * time.Second,
+		Timeout:   5 * time.Second,
+		Transport: httpTransport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return fmt.Errorf("stopped after 10 redirects")
@@ -236,12 +239,37 @@ func ServeBot() *tgbotapi.BotAPI {
 	return bot
 }
 
-func main() {
+func checkParams() error {
 	flag.Parse()
 
-	if *help || *botToken == "" {
+	if *help {
 		flag.Usage()
-		return
+		os.Exit(0)
+	}
+	if *botToken == "" {
+		return fmt.Errorf("invalid bot token")
+	}
+	if *proxyURL != "" {
+		_, err := url.Parse(*proxyURL)
+		if err != nil {
+			return fmt.Errorf("invalid proxy url")
+		}
+		httpTransport = &http.Transport{
+			Proxy: func(r *http.Request) (*url.URL, error) {
+				return url.Parse(*proxyURL)
+			},
+		}
+	} else {
+		httpTransport = &http.Transport{}
+	}
+	return nil
+}
+
+func main() {
+	if err := checkParams(); err != nil {
+		fmt.Println("Error: " + err.Error())
+		flag.Usage()
+		os.Exit(1)
 	}
 
 	botAPI = ServeBot()
