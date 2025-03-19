@@ -4,11 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"reverse-short-url/biliutil"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,7 +25,7 @@ var (
 	proxyURL = flag.String("p", "", "Proxy for web requests. (e.g., http://127.0.0.1:8080, socks5://127.0.0.1:1080)")
 )
 
-var bilibiliHost = "www.bilibili.com"
+const bilibiliHost = "www.bilibili.com"
 
 var botAPI *tgbotapi.BotAPI
 var httpTransport *http.Transport
@@ -120,7 +120,7 @@ func checkBiliBV(rawurl string) (bv string, av string, err error) {
 		}
 	}
 	if bv != "" {
-		av = bv2av(bv)
+		av = "av" + strconv.FormatInt(biliutil.Decode(bv), 10)
 	}
 
 	if bv != "" && av != "" {
@@ -128,26 +128,6 @@ func checkBiliBV(rawurl string) (bv string, av string, err error) {
 	} else {
 		return "", "", fmt.Errorf("convert bv to av failed")
 	}
-}
-
-func bv2av(bv string) string {
-	table := "fZodR9XQDSUm21yCkr6zBqiveYah8bt4xsWpHnJE7jL5VG3guMTKNPAwcF"
-	s := [6]int64{11, 10, 3, 8, 4, 6}
-
-	const xor int64 = 177451812
-	const add int64 = 8728348608
-
-	var r int64
-	var av int64
-	tr := make(map[int64]int64)
-	for i := 0; i < 58; i++ {
-		tr[int64(table[i])] = int64(i)
-	}
-	for i := 0; i < 6; i++ {
-		r += tr[int64(bv[s[i]])] * int64(math.Pow(float64(58), float64(i)))
-	}
-	av = (r - add) ^ xor
-	return "av" + strconv.FormatInt(av, 10)
 }
 
 func ReverseShortURL(msg string) (string, error) {
@@ -276,6 +256,6 @@ func main() {
 	defer botAPI.StopReceivingUpdates()
 
 	osSignals := make(chan os.Signal, 1)
-	signal.Notify(osSignals, os.Interrupt, os.Kill, syscall.SIGTERM)
+	signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM)
 	<-osSignals
 }
