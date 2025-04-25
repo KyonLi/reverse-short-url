@@ -38,7 +38,7 @@ func getRedirectURL(shortURL string) ([]string, error) {
 
 	result := append(make([]string, 0), shortURL)
 	client := http.Client{
-		Timeout:   5 * time.Second,
+		Timeout:   15 * time.Second,
 		Transport: httpTransport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
